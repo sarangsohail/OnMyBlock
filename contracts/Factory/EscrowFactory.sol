@@ -28,8 +28,6 @@ contract EscrowFactory {
     switchActiveTrustedTokens(trustedTokens, true);
   }
 
-
-
   function createEscrow(
 
     address payable seller,
