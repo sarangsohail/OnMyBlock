@@ -1,3 +1,39 @@
+// escrow.test.js
+
+let escrow; 
+let owner;
+let buyer;
+let seller;
+
+// Could use beforeEach to handle setup
+beforeEach(async () => {
+
+  // Deploy contracts
+  escrow = await Escrow.deploy(); 
+  owner = await getOwnerAccount();
+
+  // Get signers
+  [buyer, seller] = await ethers.getSigners(); 
+
+});
+
+it('sends fee to owner wallet', async () => {
+
+  // Arrange
+  const ownerWallet = owner.address;
+  const amount = 1000;
+  const feePercent = 5;
+
+  // Act
+  await escrow.connect(buyer).deposit({value: amount})
+  await escrow.connect(seller).complete();
+  
+  // Assert
+  const fee = (amount * feePercent) / 100;
+  expect(await ethers.provider.getBalance(ownerWallet)).to.equal(fee);
+
+});
+
 // Test constructor
 it('sets state variables properly', async () => {
   // Validate escrowDetail, tokenAddress, feeAddress etc
@@ -41,3 +77,5 @@ it('transfers correct amounts to buyer and seller', async () => {
 
   expect(await token.balanceOf(seller.address)).to.equal(sellerBalanceAfter);
 })
+
+
