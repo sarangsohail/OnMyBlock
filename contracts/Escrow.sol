@@ -1,9 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-
 contract Escrow {
+
+uint256 private guardCounter;
+
+modifier nonReentrant() {
+    require(guardCounter == 0, "Reentrancy detected");
+    guardCounter++;
+    _;
+    guardCounter--;
+}
+
     enum EscrowStatus {
         Launched,
         Ongoing,
@@ -15,173 +23,158 @@ contract Escrow {
     }
 
     struct EscrowDetail {
-        EscrowStatus status;
-        bytes32 title;
-        address tokenAddress;
-        uint256 deadline;
-        address payable buyer;
-        address payable seller;
-        uint256 requestRevisedDeadline;
-        uint256 amount;
-        address escrowAddress;
-        uint8 feePercent;
+    EscrowStatus status;
+    bytes32 title;
+    uint256 deadline;
+    address payable buyer;
+    address payable seller;
+    uint256 requestRevisedDeadline;
+    uint256 amount;
+    address escrowAddress;
+    uint8 feePercent;
     }
 
     EscrowDetail escrowDetail;
-    address payable public addressToPayFee;
-    uint256 rejectCount = 0;
-    address public tokenAddress;
+
+    address payable public feeWallet;
+    uint256 public rejectCount = 0;
+
     mapping(address => bool) public areTrustedHandlers;
 
     constructor(
-        address payable _addressToPayFee,
-        address _tokenAddress,
+        address payable _feeWallet,
         uint256 _duration,
-        uint256 amount,
-        bytes32 title,
-        address payable buyer,
-        address payable seller,
+        uint256 _amount,
+        bytes32 _title,
+        address payable _buyer,
+        address payable _seller,
         uint8 _feePercent,
         address[] memory _handlers
     ) {
-        require(_duration == 0 || _duration >= 86400, '___INVALID_DURATION___'); // SHOULD BE MIN 1 DAY
-        require(_feePercent > 0 || _feePercent < 100, '___INVALID_FEE_PERCENT___');
-        uint256 duration = 915151608; //29 years default
-        if (_duration >= 0) {
-            duration = _duration;
-        }
-        addressToPayFee = _addressToPayFee;
-        tokenAddress = _tokenAddress;
-        areTrustedHandlers[msg.sender] = true;
-        addTrustedHandlers(_handlers);
-        escrowDetail = EscrowDetail(
-            EscrowStatus.Launched,
-            title,
-            _tokenAddress,
-            duration + block.timestamp,
-            buyer,
-            seller,
-            0,
-            amount,
-            address(this),
-            _feePercent
-        ); // solhint-disable-line not-rely-on-time
-    }
+    require(_duration >= 1 days, "INVALID_DURATION");
+    require(_feePercent > 0 && _feePercent < 100, "INVALID_FEE_PERCENT");
 
-    fallback() external payable {
-        require(uint8(escrowDetail.status) < 5, '___NOT_ELIGIBLE___');
-        require(msg.value > 0, '___INVALID_AMOUNT___');
+
+    feeWallet = _feeWallet;
+
+    areTrustedHandlers[msg.sender] = true;
+    addTrustedHandlers(_handlers);
+
+    escrowDetail = EscrowDetail(
+        EscrowStatus.Launched,
+        _title,
+        block.timestamp + _duration,
+        _buyer,
+        _seller,
+        0,
+        _amount,
+        address(this),
+        _feePercent
+        );
     }
 
     receive() external payable {
-        require(uint8(escrowDetail.status) < 5, '___NOT_ELIGIBLE___');
-        require(msg.value > 0, '___INVALID_AMOUNT___');
+        require(uint8(escrowDetail.status) < 5, "NOT_ELIGIBLE");
+        require(msg.value > 0, "INVALID_AMOUNT");
     }
 
     function getBalance() public view returns (uint256) {
-        if (tokenAddress == address(0)) {
-            return address(this).balance;
-        }
-        return IERC20(tokenAddress).balanceOf(address(this));
+        return address(this).balance;
     }
 
-    function addTrustedHandlers(address[] memory _handlers) public trusted {
+    function addTrustedHandlers(address[] memory _handlers) public onlyTrusted {
         for (uint256 i = 0; i < _handlers.length; i++) {
-            areTrustedHandlers[_handlers[i]] = true;
-        }
+        areTrustedHandlers[_handlers[i]] = true;
+    }
     }
 
-    function sendAndStatusUpdate(address payable toFund, EscrowStatus status) private {
-        uint256 fee = (escrowDetail.amount * escrowDetail.feePercent) / 100; // %1
-        if (tokenAddress == address(0)) {
-            addressToPayFee.transfer(fee); // %1
-            toFund.transfer(escrowDetail.amount - fee);
-        } else {
-            IERC20 token = IERC20(tokenAddress);
-            token.transfer(addressToPayFee, fee); // %1
-            token.transfer(toFund, escrowDetail.amount - fee);
-        }
-        escrowDetail.status = status;
+    function sendFundsAndUpdateStatus(address payable to, EscrowStatus newStatus) private {
+        uint256 fee = (escrowDetail.amount * escrowDetail.feePercent) / 100;
+        feeWallet.transfer(fee);
+        to.transfer(escrowDetail.amount - fee);
+        escrowDetail.status = newStatus;
     }
 
-    function sellerLaunchedApprove() public onlySeller {
-        require(getBalance() > 0, '___NO_FUNDS___');
-        require(escrowDetail.status == EscrowStatus.Launched, '___NOT_IN_LAUNCHED_STATUS___');
+    function sellerApproveLaunch() public nonReentrant onlySeller {
+        require(escrowDetail.status == EscrowStatus.Launched, "NOT_IN_LAUNCHED_STATUS");
+        require(address(this).balance >= escrowDetail.amount, "INSUFFICIENT_FUNDS");
+
+
         escrowDetail.status = EscrowStatus.Ongoing;
     }
 
-    function sellerDeliver() external onlySeller {
-        require(escrowDetail.status == EscrowStatus.Ongoing, '___NOT_IN_ONGOING_STATUS___');
+    function sellerMarkDelivered() public onlySeller {
+        require(escrowDetail.status == EscrowStatus.Ongoing, "NOT_IN_ONGOING_STATUS");
+
+
         escrowDetail.status = EscrowStatus.Delivered;
     }
 
-    function buyerConfirmDelivery() external onlyBuyer {
-        require(escrowDetail.status == EscrowStatus.Delivered, '___NOT_IN_DELIVERED_STATUS___');
-        sendAndStatusUpdate(escrowDetail.seller, EscrowStatus.Complete);
+    function buyerConfirmDelivery() public nonReentrant onlyBuyer {
+        require(escrowDetail.status == EscrowStatus.Delivered, "NOT_IN_DELIVERED_STATUS");
+
+
+        sendFundsAndUpdateStatus(escrowDetail.seller, EscrowStatus.Complete);
     }
 
-    function buyerDeliverReject(uint256 _deliverRejectDuration) external onlyBuyer {
-        require(escrowDetail.status == EscrowStatus.Delivered, '___NOT_IN_DELIVERED_STATUS___');
-        require(_deliverRejectDuration >= 86400, '___REJECT_MIN_DAY___'); //1 day min
+    function buyerRejectDelivery(uint256 _rejectDuration) public onlyBuyer {
+        require(escrowDetail.status == EscrowStatus.Delivered,"NOT_IN_DELIVERED_STATUS");
+        require(_rejectDuration >= 1 days, "INVALID_REJECT_DURATION");
+
+
         rejectCount++;
-        EscrowStatus state = EscrowStatus.RequestRevised;
+
         if (rejectCount > 1) {
-            state = EscrowStatus.Dispute;
-            escrowDetail.status = state;
-        } else {
-            escrowDetail.status = state;
-            escrowDetail.requestRevisedDeadline = _deliverRejectDuration + block.timestamp;
+            escrowDetail.status = EscrowStatus.Dispute;
+        } 
+        else {
+            escrowDetail.status = EscrowStatus.RequestRevised;
+            escrowDetail.requestRevisedDeadline = block.timestamp + _rejectDuration;
         }
     }
 
-    function sellerRejectDeliverReject() external onlySeller {
-        require(escrowDetail.status == EscrowStatus.RequestRevised, '___NOT_IN_REJECT_DELIVERY_STATUS___');
+    function sellerRejectDeliveryRejection() public onlySeller {
+        require(escrowDetail.status == EscrowStatus.RequestRevised, "NOT_IN_REQUEST_REVISED_STATUS");
+
+
         escrowDetail.status = EscrowStatus.Dispute;
     }
 
-    function sellerApproveDeliverReject() external onlySeller {
-        require(escrowDetail.status == EscrowStatus.RequestRevised, '___NOT_IN_REJECT_DELIVERY_STATUS___');
+    function sellerApproveDeliveryRejection() public onlySeller {
+        require(escrowDetail.status == EscrowStatus.RequestRevised, "NOT_IN_REQUEST_REVISED_STATUS");
+
         escrowDetail.status = EscrowStatus.Ongoing;
         escrowDetail.deadline = escrowDetail.requestRevisedDeadline;
     }
 
-    function cancel() external {
-        require(uint8(escrowDetail.status) < 3, '___NOT_ELIGIBLE___');
-        require(msg.sender == escrowDetail.buyer || msg.sender == escrowDetail.seller, '___INVALID_BUYER_SELLER___');
+    function cancel() public {
+        require(uint8(escrowDetail.status) < 3, "NOT_ELIGIBLE_FOR_CANCELLATION");
+        require(msg.sender == escrowDetail.buyer || msg.sender == escrowDetail.seller, "ONLY_BUYER_OR_SELLER_ALLOWED");
 
-        if (
-            msg.sender == escrowDetail.buyer &&
-            (escrowDetail.status == EscrowStatus.Ongoing || escrowDetail.status == EscrowStatus.RequestRevised)
-        ) {
-            require(escrowDetail.deadline <= block.timestamp && block.timestamp >= escrowDetail.requestRevisedDeadline, '___NOT_EXPIRED___');
-        }
 
-        sendAndStatusUpdate(escrowDetail.buyer, EscrowStatus.Cancelled);
+    if (msg.sender == escrowDetail.buyer) {
+        require(escrowDetail.deadline <= block.timestamp, "___DEADLINE_NOT_EXPIRED___");
     }
 
-    function fund(address payable toFund) external trusted {
-        require(toFund == escrowDetail.buyer || toFund == escrowDetail.seller, '___INVALID_BUYER_SELLER___');
-        require(EscrowStatus.Cancelled != escrowDetail.status, '___ALREADY_CANCELLED___');
-        require(escrowDetail.status != EscrowStatus.Complete, '___NOT_IN_COMPLETE_STATUS___');
-        sendAndStatusUpdate(toFund, EscrowStatus.Complete);
+        sendFundsAndUpdateStatus(escrowDetail.buyer, EscrowStatus.Cancelled);
     }
 
-    function getDetails() public view returns (EscrowDetail memory escrow) {
+    function getDetails() public view returns (EscrowDetail memory) {
         return escrowDetail;
     }
 
     modifier onlyBuyer() {
-        require(msg.sender == escrowDetail.buyer, '___ONLY_BUYER___');
+        require(msg.sender == escrowDetail.buyer, "ONLY_BUYER_ALLOWED");
         _;
     }
 
     modifier onlySeller() {
-        require(msg.sender == escrowDetail.seller, '___ONLY_SELLER___');
+        require(msg.sender == escrowDetail.seller, "ONLY_SELLER_ALLOWED");
         _;
     }
 
-    modifier trusted() {
-        require(areTrustedHandlers[msg.sender], '___NOT_TRUSTED___');
+    modifier onlyTrusted() {
+        require(areTrustedHandlers[msg.sender], "ONLY_TRUSTED_HANDLERS_ALLOWED");
         _;
     }
-}
+    }
