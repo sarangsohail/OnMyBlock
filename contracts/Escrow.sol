@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
 contract Escrow {
@@ -53,7 +52,6 @@ modifier nonReentrant() {
     ) {
     require(_duration >= 1 days, "INVALID_DURATION");
     require(_feePercent > 0 && _feePercent < 100, "INVALID_FEE_PERCENT");
-
 
     feeWallet = _feeWallet;
 
@@ -177,4 +175,4 @@ modifier nonReentrant() {
         require(areTrustedHandlers[msg.sender], "ONLY_TRUSTED_HANDLERS_ALLOWED");
         _;
     }
-    }
+}
