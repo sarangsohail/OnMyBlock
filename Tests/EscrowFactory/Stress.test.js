@@ -1,39 +1,56 @@
-it('creates escrows under contention', async () => {
+// Creates multiple escrows in parallel 
+it('creates multiple escrows in parallel', async () => {
 
-  // Create escrows in parallel from different accounts
+  const tasks = [];
+
   for(let i = 0; i < 10; i++) {
-    const task = factory.connect(accounts[i]).createEscrow({...}); 
+
+    const task = factory.connect(accounts[i]).createEscrow({
+      // params 
+    });
+    
     tasks.push(task);
   }
 
-  await Promise.all(tasks);
+  const results = await Promise.all(tasks);
 
-  // All escrows should have been created  
+  for(let i = 0; i < results.length; i++) {
+    // Check for Created event
+    await expect(results[i])
+      .to.emit(factory, 'Created')
+      .withArgs(accounts[i], i); 
+  }
+
+  // Spot check escrow state
+  const escrow5 = await Escrow.attach(results[5]); 
+  expect(await escrow5.seller()).to.equal(accounts[5]);
+
 });
 
+// Deploys escrows concurrently from different accounts
+it('deploys escrows concurrently', async () => {
 
-it('creates escrows under contention', async () => {
+  const tasks = [];
 
-    // Increase iterations
-    for(let i = 0; i < 50; i++) { 
+  // Increase iterations
+  for(let i = 0; i < 50; i++) {
+
+    const task = factory.connect(accounts[i]).createEscrow({
+       // params
+    });
     
-      const task = factory.connect(accounts[i]).createEscrow({
-        // params  
-      });
-      
-      tasks.push(task);
-  
-    }
-  
-    await Promise.all(tasks);
-  
-    // Validate escrows
-    for(let i = 0; i < tasks.length; i++) {
-      expect(tasks[i]).to.not.equal(ZERO_ADDRESS);
-    }
-  
-    const total = await factory.escrowCount();
-    expect(total).to.equal(tasks.length);
-  
-  });
-  
+    tasks.push(task);
+
+  }
+
+  const results = await Promise.all(tasks);
+
+  // Check total escrow count
+  const total = await factory.escrowCount();
+  expect(total).to.equal(tasks.length);
+
+  // Check escrow ids are sequential
+  const escrowId = await factory.getEscrowId(results[10]);
+  expect(escrowId).to.equal(10);
+
+});

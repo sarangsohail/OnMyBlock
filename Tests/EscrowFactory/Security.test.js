@@ -16,9 +16,19 @@
   });
 
   it('reverts with invalid duration', async () => {
+
     await expect(
-      factory.createEscrow(0) 
-    ).to.be.reverted;
+      factory.createEscrow(0)
+    ).to.be.revertedWith('Invalid duration');
+    
+    await expect(  
+      factory.createEscrow(-1)
+    ).to.be.revertedWith('Invalid duration');
+  
+    await expect(
+      factory.createEscrow(3600) // 1 hour
+    ).to.be.revertedWith('Invalid duration');
+  
   });
   
   it('reverts with long names', async () => {
