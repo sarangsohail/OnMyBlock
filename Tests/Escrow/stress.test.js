@@ -28,39 +28,77 @@ it('does not crash with max uint256 values', async () => {
 });
   
 it('handles large dispute batches', async () => {
-  
-    // Create 250 disputes
-    for (let i = 0; i < 250; i++) {
-        // ...dispute creation  
-    }
 
-    // Resolve disputes
-    for (let i = 0; i < 250; i++) {
-        // ... dispute resolution
-        }
-    
-        // Should not crash or run out of gas
+  // Create disputes
+  for (let i = 0; i < 250; i++) { 
+     await escrow.connect(accounts[i]).dispute(reasons[i]);
+  }
+  
+  // Verify disputes created
+  const disputeCount = await escrow.disputeCount();
+  expect(disputeCount).to.equal(250);
+
+  const dispute_5 = await escrow.disputes(5); 
+  expect(dispute_5.status).to.equal(DisputeStatus.Open);
+
+  // Resolve disputes
+  for(let i = 0; i < 250; i++) {
+    await escrow.connect(owner).resolveDispute(i, accounts[i]);
+  }
+
+  // Verify disputes resolved
+  const resolvedCount = await escrow.resolvedCount();
+  expect(resolvedCount).to.equal(250);
+  
+  const dispute_5_again = await escrow.disputes(5);
+  expect(dispute_5_again.status).to.equal(DisputeStatus.Resolved);
+
 });
 
-  // Many rapid state transitions
 it('handles rapid state changes', async () => {
 
-    for(let i = 0; i < 100; i++) {
-      await escrow.transitionNextState(); 
-    }
+  const initialState = await escrow.getState();
   
-    // Should not fail or run out of gas
-})
+  for(let i = 0; i < 100; i++) {
+    await escrow.connect(owner).transitionNextState();
+  }
+
+  const midState = await escrow.getState();
+  expect(midState).not.to.equal(initialState);  
+
+  const finalState = await escrow.getState();
+  expect(finalState).not.to.equal(midState);
+
+});
   
-// Large token approvals
+// Handles large token approvals properly
 it('handles large token approvals', async () => {
-    
-    const largeAmount = ethers.constants.MaxUint256;
-  
-    await token.approve(escrow.address, largeAmount);
-  
-    // Should not fail or crash
-})
+
+  const largeAmount = ethers.constants.MaxUint256;
+
+  await token.approve(escrow.address, largeAmount);
+
+  let initialAllowance = await token.allowance(owner.address, escrow.address);
+  expect(initialAllowance).to.equal(0);
+
+  const initialOwnerBalance = await token.balanceOf(owner.address);  
+
+  const other = accounts[1];
+  await token.connect(other).approve(escrow.address, largeAmount);
+
+  const secondAccountAllowance = await token.allowance(other.address, escrow.address);
+  expect(secondAccountAllowance).to.equal(largeAmount);
+
+  await token.transferFrom(owner.address, other.address, 100);
+
+  // Check first allowance decreased
+  const updatedAllowance = await token.allowance(owner.address, escrow.address);
+  expect(updatedAllowance).to.equal(largeAmount - 100);
+
+  const finalOwnerBalance = await token.balanceOf(owner.address);
+  expect(finalOwnerBalance).to.equal(initialOwnerBalance - 100);
+
+});
   
 // Long deadline overflow
 it('fails safely on deadline overflow', async () => {
