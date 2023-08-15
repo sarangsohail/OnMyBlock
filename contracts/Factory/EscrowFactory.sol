@@ -12,27 +12,21 @@ contract EscrowFactory {
   address public feeWalletAddress;
   uint8 public feePercent;
 
-  mapping(address => bool) public areTrusted;
-
   uint256 public counter;
 
   address[] public escrows;
+  
+  address public myAddress;
 
   mapping(address => address[]) public myEscrows;
 
-  mapping(address => bool) public areTrusted;
+  mapping(address => bool) public trusted;
 
   event Created(address indexed escrowAddress);
 
   constructor(
-    address admin,
-    address backupAdmin,
-    address[] memory initialTrusted
-  ) {
-    areTrusted[admin] = true;
-    areTrusted[backupAdmin] = true;
-    addTrusted(initialTrusted);
-  }
+    address myAddress = 0xeCBd44299C33D035511673ec65eb3E7D7658c766;
+  ) 
 
   function createEscrow(
     address payable seller,
@@ -58,7 +52,8 @@ contract EscrowFactory {
       payable(msg.sender),
       seller,
       feePercent,
-      getTrusted()
+      trustedDisputer: 0xeCBd44299C33D035511673ec65eb3E7D7658c766 
+      /* getTrusted() */
     );
 
     escrow.sendValue(amount.sub(fee));
@@ -79,32 +74,34 @@ contract EscrowFactory {
     to.transfer(amount);
   }
 
-  function addTrusted(address[] memory handlers)
-    public
-    onlyTrusted
-  {
-    for (uint i = 0; i < handlers.length; i++) {
-      areTrusted[handlers[i]] = true;
-    }
+function addTrusted(address _newTrusted) public onlyOwner {
+    trusted[_newTrusted] = true;
   }
-
-  function getTrusted() public view returns (address[] memory) {
+ 
+function getTrusted() public view onlyOwner returns(address[] memory) {
 
   address[] memory result = new address[](trustedCount);
-  uint index = 0;
+  
+  uint count = 0;
 
   for (uint i = 0; i < trustedAddresses.length; i++) {
-    if (areTrusted[trustedAddresses[i]]) {
-      result[index] = trustedAddresses[i];
-      index++;
+    if (trusted[trustedAddresses[i]]) {
+      result[count] = trustedAddresses[i];
+      count++;
     }
   }
 
   return result;
-}
 
-  modifier onlyTrusted() {
-    require(areTrusted[msg.sender], "Not trusted");
+}
+  
+modifier onlyTrusted() {
+  require(msg.sender == 0xeCBd44299C33D035511673ec65eb3E7D7658c766); 
     _;
   }
+
+modifier onlyOwner() {
+  require(msg.sender == myAddress);
+  _;
+}
 }
