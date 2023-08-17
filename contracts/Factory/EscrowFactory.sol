@@ -1,4 +1,4 @@
-pragma solidity 0.8.15;
+pragma solidity ^0.8.19;
 
 import "./Escrow.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
@@ -7,9 +7,11 @@ import "@openzeppelin/contracts/utils/Address.sol";
 contract EscrowFactory {
 
   using SafeMath for uint256;
+  
   using Address for address payable;
 
   address public feeWalletAddress;
+
   uint8 public feePercent;
 
   uint256 public counter;
@@ -18,15 +20,18 @@ contract EscrowFactory {
   
   address public myAddress;
 
+  address trustedDisputer = myAddress; 
+
   mapping(address => address[]) public myEscrows;
 
   mapping(address => bool) public trusted;
 
   event Created(address indexed escrowAddress);
 
-  constructor(
-    address myAddress = 0xeCBd44299C33D035511673ec65eb3E7D7658c766;
-  ) 
+  constructor(address _myAddress, address _feeWalletAddress) {
+    myAddress = _myAddress;
+    feeWalletAddress = _feeWalletAddress; 
+  }
 
   function createEscrow(
     address payable seller,
@@ -52,8 +57,7 @@ contract EscrowFactory {
       payable(msg.sender),
       seller,
       feePercent,
-      trustedDisputer: 0xeCBd44299C33D035511673ec65eb3E7D7658c766 
-      /* getTrusted() */
+      trustedDisputer 
     );
 
     escrow.sendValue(amount.sub(fee));
