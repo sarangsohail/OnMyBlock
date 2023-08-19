@@ -20,11 +20,13 @@ contract EscrowFactory {
   
   address public myAddress;
 
-  address trustedDisputer = myAddress; 
+  address payable public escrow;
+
+  // address trustedDisputer = myAddress; 
 
   mapping(address => address[]) public myEscrows;
 
-  mapping(address => bool) public trusted;
+  address public constant TRUSTED = 0xeCBd44299C33D035511673ec65eb3E7D7658c766;
 
   event Created(address indexed escrowAddress);
 
@@ -47,9 +49,12 @@ contract EscrowFactory {
 
     uint256 fee = amount.mul(feePercent).div(100);
 
-    feeWalletAddress.sendValue(fee);
+    payable(feeWalletAddress).sendValue(fee);
 
-    Escrow escrow = new Escrow(
+    address[] memory trusted = new address[](1);
+    trusted[0] = TRUSTED;
+
+    Escrow newEscrow = new Escrow(
       payable(feeWalletAddress),
       duration,
       amount.sub(fee),
@@ -57,10 +62,10 @@ contract EscrowFactory {
       payable(msg.sender),
       seller,
       feePercent,
-      trustedDisputer 
+      trusted
     );
 
-    escrow.sendValue(amount.sub(fee));
+   payable(address(escrow)).transfer(amount.sub(fee));
 
     escrows.push(address(escrow));
     myEscrows[msg.sender].push(address(escrow));
@@ -78,30 +83,30 @@ contract EscrowFactory {
     to.transfer(amount);
   }
 
-function addTrusted(address _newTrusted) public onlyOwner {
-    trusted[_newTrusted] = true;
-  }
+// function addTrusted(address _newTrusted) public onlyOwner {
+//     trusted[_newTrusted] = true;
+//   }
  
-function getTrusted() public view onlyOwner returns(address[] memory) {
+// function getTrusted() public view onlyOwner returns(address[] memory) {
 
-  address[] memory result = new address[](trustedCount);
+//   // address[] memory result = new address[](trustedCount);
   
-  uint count = 0;
+//   // uint count = 0;
 
-  for (uint i = 0; i < trustedAddresses.length; i++) {
-    if (trusted[trustedAddresses[i]]) {
-      result[count] = trustedAddresses[i];
-      count++;
-    }
-  }
+//   // for (uint i = 0; i < trustedAddresses.length; i++) {
+//   //   if (trusted[trustedAddresses[i]]) {
+//   //     result[count] = trustedAddresses[i];
+//   //     count++;
+//   //   }
+//   // }
 
-  return result;
+//   // return result;
 
-}
+// }
   
 modifier onlyTrusted() {
-  require(msg.sender == 0xeCBd44299C33D035511673ec65eb3E7D7658c766); 
-    _;
+  require(msg.sender == TRUSTED);
+  _;
   }
 
 modifier onlyOwner() {
