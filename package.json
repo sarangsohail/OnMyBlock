@@ -1,5 +1,29 @@
 {
   "dependencies": {
-    "@openzeppelin/contracts": "^4.9.3"
-  }
+    "@openzeppelin/contracts": "^4.9.3",
+    "uws": "^200.0.0"
+  },
+  "name": "escrowdapp",
+  "description": "",
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "devDependencies": {
+    "hardhat": "^2.17.1"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sarangsohail/OnMyBlock.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sarangsohail/OnMyBlock/issues"
+  },
+  "homepage": "https://github.com/sarangsohail/OnMyBlock#readme"
 }

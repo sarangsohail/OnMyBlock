@@ -1,4 +1,35 @@
-  
+  describe('EscrowFactory', () => {
+
+    let factory;
+    let trusted; 
+    let randomUser;
+
+    beforeEach(async () => {
+      [_, trusted, randomUser] = await ethers.getSigners();
+
+      factory = await EscrowFactory.deploy();
+    });
+
+    it('non-trusted cannot withdraw', async () => {
+    
+      // Fund the factory
+      await factory.connect(trusted).fund({value: 1});
+
+      // Check balance
+      expect(await factory.getBalance()).to.equal(1);
+
+      // Random user tries to withdraw
+      await expect(
+        factory.connect(randomUser).withdraw(randomUser.address, 1)
+      ).to.be.revertedWith("Only trusted can withdraw");
+
+      // Balance should remain
+      expect(await factory.getBalance()).to.equal(1);
+
+    });
+
+  });  
+
   it('does not allow reentrancy', async () => {
     
     const maliciousContract = await MaliciousContract.deploy(factory.address);
@@ -54,8 +85,4 @@
   
   });
   
-  it('non-trusted cannot withdraw', async () => {
-    await expect( 
-      factory.connect(randomUser).withdraw(...)
-    ).to.be.reverted;
-  });
+  
